@@ -500,20 +500,43 @@ class UsageWidget(tk.Tk):
         accent = self.palette["accent"]
         image = Image.new("RGBA", (64, 64), bg)
         draw = ImageDraw.Draw(image)
-        draw.rectangle((2, 2, 61, 61), outline=accent, width=3)
-        draw.rectangle((8, 48, 56, 54), fill=self.palette["bar_bg"])
-        fill_width = int(48 * max(0.0, min(100.0, remaining)) / 100)
-        draw.rectangle((8, 48, 8 + fill_width, 54), fill=accent)
-        font = self._tray_font(28)
+        draw.rectangle((1, 1, 62, 62), outline=accent, width=4)
+        draw.rectangle((5, 5, 58, 58), outline=self.palette["line"], width=1)
+        font = self._fit_tray_font(draw, text)
         try:
             box = draw.textbbox((0, 0), text, font=font)
             width = box[2] - box[0]
             height = box[3] - box[1]
+            x_offset = box[0]
+            y_offset = box[1]
         except AttributeError:
             width, height = draw.textsize(text, font=font)
-        draw.text(((64 - width) / 2, 13 - height / 2), text, fill=self.palette["text"], font=font)
-        draw.text((43, 32), "%", fill=self.palette["muted"], font=self._tray_font(11))
+            x_offset = 0
+            y_offset = 0
+        x = (64 - width) / 2 - x_offset
+        y = (64 - height) / 2 - y_offset - 1
+        draw.text(
+            (x, y),
+            text,
+            fill=self.palette["text"],
+            font=font,
+            stroke_width=2,
+            stroke_fill=bg,
+        )
         return image
+
+    def _fit_tray_font(self, draw: object, text: str) -> object:
+        for size in range(48, 19, -2):
+            font = self._tray_font(size)
+            try:
+                box = draw.textbbox((0, 0), text, font=font, stroke_width=2)
+                width = box[2] - box[0]
+                height = box[3] - box[1]
+            except AttributeError:
+                width, height = draw.textsize(text, font=font)
+            if width <= 52 and height <= 48:
+                return font
+        return self._tray_font(20)
 
     def _tray_font(self, size: int) -> object:
         if ImageFont is None:
