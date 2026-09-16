@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from importlib.resources import files
 import locale
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
 import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
@@ -28,6 +32,10 @@ from .reader import CodexUsage, UsageWindow, read_latest_usage
 
 REFRESH_MS = 10 * 60 * 1000
 DEFAULT_OPACITY = 75
+SHORTCUT_NAME = "Codex Usage Widget.lnk"
+APP_COMMAND = "codex-usage-widget"
+ICON_FILE_NAME = "codex-usage-widget.ico"
+POWERSHELL_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 TRANSLATIONS = {
     "zh-Hant": {
@@ -214,6 +222,7 @@ class UsageWidget(tk.Tk):
         self.close_button = self._button(self.buttons_frame, self._t("close"), self.close_app)
         self.close_button.pack(side="left", expand=True, fill="x", padx=(6, 0))
 
+        self._ensure_desktop_shortcut()
         self._setup_tray_icon()
         self.refresh_now()
 
@@ -444,6 +453,104 @@ class UsageWidget(tk.Tk):
         self.canvas.create_line(x2 - 44, y2 - 22, x2, y2 - 22, fill=accent, width=3)
         self.canvas.create_text(x1 + 18, y1 + 22, anchor="w", text=title, fill=accent, font=("Consolas", 13, "bold"))
 
+    def _ensure_desktop_shortcut(self) -> None:
+        if sys.platform != "win32":
+            return
+        desktop = self._desktop_dir()
+        target, arguments = self._shortcut_launch_command()
+        if desktop is None or target is None:
+            return
+        shortcut = desktop / SHORTCUT_NAME
+        icon = self._shortcut_icon_path() or target
+        script = """
+param([string]$ShortcutPath, [string]$TargetPath, [string]$LaunchArguments, [string]$WorkingDirectory, [string]$IconPath)
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($ShortcutPath)
+$shortcut.TargetPath = $TargetPath
+$shortcut.Arguments = $LaunchArguments
+$shortcut.WorkingDirectory = $WorkingDirectory
+$shortcut.IconLocation = $IconPath
+$shortcut.Description = 'Launch Codex Usage Widget'
+$shortcut.Save()
+"""
+        script_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8") as handle:
+                handle.write(script)
+                script_path = Path(handle.name)
+            subprocess.run(
+                [
+                    POWERSHELL_EXE,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script_path),
+                    "-ShortcutPath",
+                    str(shortcut),
+                    "-TargetPath",
+                    str(target),
+                    "-LaunchArguments",
+                    arguments,
+                    "-WorkingDirectory",
+                    str(Path.home()),
+                    "-IconPath",
+                    str(icon),
+                ],
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=8,
+            )
+        except OSError:
+            return
+        finally:
+            if script_path is not None:
+                try:
+                    script_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def _desktop_dir(self) -> Path | None:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            ) as key:
+                value = winreg.QueryValueEx(key, "Desktop")[0]
+        except OSError:
+            value = r"%USERPROFILE%\Desktop"
+        expanded = Path(str(value).replace("%USERPROFILE%", str(Path.home())))
+        return expanded if expanded.exists() else None
+
+    def _shortcut_icon_path(self) -> Path | None:
+        try:
+            icon = files("codex_usage_widget") / "assets" / ICON_FILE_NAME
+        except (FileNotFoundError, ModuleNotFoundError):
+            return None
+        icon_path = Path(str(icon))
+        return icon_path if icon_path.exists() else None
+
+    def _shortcut_launch_command(self) -> tuple[Path | None, str]:
+        pythonw = self._pythonw_path()
+        if pythonw is not None:
+            return pythonw, "-m codex_usage_widget"
+        command = shutil.which(APP_COMMAND)
+        if command:
+            return Path(command), ""
+        candidate = Path(sys.argv[0])
+        return (candidate, "") if candidate.exists() else (None, "")
+
+    def _pythonw_path(self) -> Path | None:
+        executable = Path(sys.executable)
+        candidates = [executable.with_name("pythonw.exe")]
+        package_file = Path(__file__).resolve()
+        parents = list(package_file.parents)
+        if len(parents) >= 4:
+            candidates.append(parents[3] / "Scripts" / "pythonw.exe")
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
     def _setup_tray_icon(self) -> None:
         if pystray is None or Image is None:
             return
@@ -562,3 +669,15 @@ class UsageWidget(tk.Tk):
 
 def main() -> None:
     UsageWidget().mainloop()
+
+
+
+
+
+
+
+
+
+
+
+

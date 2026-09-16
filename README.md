@@ -17,6 +17,7 @@
 - 系統匣預設動作：顯示置頂面板；Windows 上可用點擊/雙擊觸發，其他平台依系統匣實作而定。
 - 按鈕：語言圖示、主題圖示、`刷新` / `Refresh`、`重新連線` / `Reconnect`、`關閉` / `Close`。
 - 自動更新頻率：每 10 分鐘一次。
+- 桌面捷徑：Windows 上第一次啟動時會自動建立使用專屬圖示的 `Codex Usage Widget.lnk`，之後可直接雙擊開啟；捷徑會用無 console 的啟動方式，只顯示 UI。
 
 ## 安裝成 uv tool
 
@@ -25,7 +26,7 @@ cd C:\Users\b10n2\codex-usage-widget
 uv tool install --reinstall .
 ```
 
-安裝後可直接啟動：
+安裝後可直接啟動；第一次啟動會在桌面建立捷徑：
 
 ```powershell
 codex-usage-widget
@@ -74,3 +75,7 @@ codex-usage-widget
 $env:PYTHONPATH = "C:\Users\b10n2\codex-usage-widget\src"
 uv run --no-project --python 3.13 --with pystray --with pillow python -c "from codex_usage_widget.reader import read_latest_usage; print(read_latest_usage())"
 ```
+
+
+
+
